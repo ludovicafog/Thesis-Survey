@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: thesis-survey
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RESEARCHER_PASSWORD
+        sync: false   # set this manually in Render dashboard
+    disk:
+      name: survey-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
