@@ -148,6 +148,164 @@ app.get("/api/responses/export.xlsx", async (req, res) => {
   ws.views = [{ state: "frozen", ySplit: 1 }];
   ws.autoFilter = { from: "A1", to: { row: 1, column: cols.length } };
 
+  // ── Summary sheet ──────────────────────────────────────────────────
+  const ws2 = wb.addWorksheet("Summary");
+  const n = responses.length;
+
+  function avg(vals) {
+    const nums = vals.filter(v => v != null && v !== "" && !isNaN(Number(v))).map(Number);
+    if (!nums.length) return "";
+    return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100;
+  }
+  function count(arr, val) { return arr.filter(v => v === val).length; }
+
+  function addTitle(ws, text, row) {
+    const cell = ws.getCell(row, 1);
+    cell.value = text;
+    cell.font = { bold: true, size: 13, color: { argb: "FF2A1F0E" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8D9A8" } };
+    ws.mergeCells(row, 1, row, 4);
+  }
+  function addHeader(ws, labels, row) {
+    labels.forEach((l, i) => {
+      const c = ws.getCell(row, i + 1);
+      c.value = l;
+      c.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0A1A2B" } };
+    });
+  }
+  function addRow2(ws, label, val, row, indent) {
+    ws.getCell(row, 1).value = indent ? `  ${label}` : label;
+    ws.getCell(row, 2).value = val;
+    ws.getCell(row, 1).font = { color: { argb: "FF241B12" } };
+    ws.getCell(row, 2).font = { color: { argb: "FF241B12" } };
+    if (row % 2 === 0) {
+      [1,2,3,4].forEach(c => {
+        ws.getCell(row, c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFBF8F1" } };
+      });
+    }
+  }
+
+  ws2.getColumn(1).width = 36;
+  ws2.getColumn(2).width = 14;
+  ws2.getColumn(3).width = 14;
+  ws2.getColumn(4).width = 14;
+
+  let r2 = 1;
+
+  // Overview
+  addTitle(ws2, "Overview", r2++);
+  addRow2(ws2, "Total responses", n, r2++);
+  addRow2(ws2, "Average age", avg(responses.map(r => r.age)), r2++);
+  r2++;
+
+  // Demographics
+  addTitle(ws2, "Demographics", r2++);
+  addHeader(ws2, ["Category", "Count", "% of total"], r2++);
+  const genders = ["Female/Donna", "Male/Uomo", "Non-binary", "Prefer not to say"];
+  const genderVals = ["Donna","Female","Uomo","Male","Non binario","Non-binary","Preferisco non dirlo","Prefer not to say"];
+  // group by canonical
+  const gMap = { Female: ["Donna","Female"], Male: ["Uomo","Male"], "Non-binary": ["Non binario","Non-binary"], Other: ["Preferisco non dirlo","Prefer not to say"] };
+  Object.entries(gMap).forEach(([label, vals]) => {
+    const c = responses.filter(r => vals.includes(r.gender)).length;
+    ws2.getCell(r2, 1).value = `  ${label}`;
+    ws2.getCell(r2, 2).value = c;
+    ws2.getCell(r2, 3).value = n ? Math.round(c / n * 100) + "%" : "";
+    r2++;
+  });
+  r2++;
+
+  // Education
+  addTitle(ws2, "Education", r2++);
+  addHeader(ws2, ["Level", "Count", "%"], r2++);
+  const eduMap = {
+    "Secondary / Scuola secondaria": ["Secondary school","Scuola secondaria"],
+    "Bachelor's / Triennale": ["Bachelor's","Laurea triennale"],
+    "Master's / Magistrale": ["Master's","Laurea magistrale"],
+    "PhD / Dottorato": ["PhD","Dottorato"],
+    "Other / Altro": ["Other","Altro"]
+  };
+  Object.entries(eduMap).forEach(([label, vals]) => {
+    const c = responses.filter(r => vals.includes(r.education)).length;
+    ws2.getCell(r2, 1).value = `  ${label}`;
+    ws2.getCell(r2, 2).value = c;
+    ws2.getCell(r2, 3).value = n ? Math.round(c / n * 100) + "%" : "";
+    r2++;
+  });
+  r2++;
+
+  // Scale averages per category
+  const catThemes = { wine: "FFB05070", beer: "FF8A4E1C", spirits: "FF13586E" };
+  const catLabels = { wine: "Wine / Vino", beer: "Craft Beer / Birra", spirits: "Craft Spirits / Distillati" };
+  const scaleGroups = [
+    { label: "Heritage & Complexity (hc1–hc4)", keys: ["hc1","hc2","hc3","hc4"] },
+    { label: "Feeling Included (cb1–cb4)", keys: ["cb1","cb2","cb3","cb4"] },
+    { label: "Feeling at Ease (fa1–fa4)", keys: ["fa1","fa2","fa3","fa4"] },
+  ];
+
+  addTitle(ws2, "Perception Scale Averages  (1–5)", r2++);
+  addHeader(ws2, ["Scale", "Wine", "Beer", "Spirits"], r2++);
+  ws2.getColumn(3).width = 12;
+  ws2.getColumn(4).width = 12;
+
+  scaleGroups.forEach(sg => {
+    ws2.getCell(r2, 1).value = sg.label;
+    ["wine","beer","spirits"].forEach((cat, ci) => {
+      const vals = responses.map(resp => resp.perceptions?.[cat]);
+      const allVals = sg.keys.flatMap(k => vals.map(p => p?.[k]));
+      ws2.getCell(r2, ci + 2).value = avg(allVals);
+    });
+    ws2.getCell(r2, 1).font = { color: { argb: "FF241B12" } };
+    r2++;
+  });
+  // Total perception avg
+  ws2.getCell(r2, 1).value = "  Overall perception avg";
+  ws2.getCell(r2, 1).font = { bold: true };
+  ["wine","beer","spirits"].forEach((cat, ci) => {
+    const allVals = PERC_KEYS.flatMap(k => responses.map(resp => resp.perceptions?.[cat]?.[k]));
+    const v = avg(allVals);
+    ws2.getCell(r2, ci + 2).value = v;
+    ws2.getCell(r2, ci + 2).font = { bold: true };
+  });
+  r2 += 2;
+
+  // Anxiety
+  addTitle(ws2, "Wine Choice Anxiety  (1–5)", r2++);
+  addHeader(ws2, ["Item", "Mean"], r2++);
+  ANX_IDS.forEach((id, i) => {
+    ws2.getCell(r2, 1).value = `  an${i+1}`;
+    ws2.getCell(r2, 2).value = avg(responses.map(resp => resp.anxiety?.[id]));
+    r2++;
+  });
+  ws2.getCell(r2, 1).value = "  Overall anxiety avg";
+  ws2.getCell(r2, 1).font = { bold: true };
+  ws2.getCell(r2, 2).value = avg(ANX_IDS.flatMap(id => responses.map(resp => resp.anxiety?.[id])));
+  ws2.getCell(r2, 2).font = { bold: true };
+  r2 += 2;
+
+  // Cues
+  addTitle(ws2, "Heritage Cues  (1 = discourages, 5 = encourages)", r2++);
+  addHeader(ws2, ["Cue", "Mean"], r2++);
+  CUE_IDS.forEach(id => {
+    ws2.getCell(r2, 1).value = `  ${id}`;
+    ws2.getCell(r2, 2).value = avg(responses.map(resp => resp.cues?.[id]));
+    r2++;
+  });
+  r2++;
+
+  // Consumption & Knowledge
+  addTitle(ws2, "Consumption & Knowledge Averages  (1–5)", r2++);
+  addHeader(ws2, ["Metric", "Wine", "Beer", "Spirits"], r2++);
+  ["consumption","knowledge"].forEach(metric => {
+    ws2.getCell(r2, 1).value = `  ${metric.charAt(0).toUpperCase() + metric.slice(1)}`;
+    ["wine","beer","spirits"].forEach((cat, ci) => {
+      ws2.getCell(r2, ci + 2).value = avg(responses.map(resp => resp[metric]?.[cat]));
+    });
+    r2++;
+  });
+
+  // ── end Summary ────────────────────────────────────────────────────
+
   const date = new Date().toISOString().slice(0, 10);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="wine_survey_${date}.xlsx"`);
