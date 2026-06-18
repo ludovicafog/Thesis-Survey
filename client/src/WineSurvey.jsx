@@ -330,6 +330,27 @@ function MatrixGroup({ title, subtitle, lowLabel, highLabel, items, tag, tagColo
   );
 }
 
+function DetailSection({ title, children, accent }) {
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em", color: accent || COLORS.accentStrong, fontWeight: 700, marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${COLORS.border}` }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function ScoreBar({ value, max = 5 }) {
+  const v = Number(value) || 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ width: 80, height: 6, background: COLORS.border, borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ width: `${(v / max) * 100}%`, height: "100%", background: COLORS.accent, borderRadius: 4, transition: "width 200ms" }} />
+      </div>
+      <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.textSecondary, minWidth: 16 }}>{v || "—"}</span>
+    </div>
+  );
+}
+
 export default function WineSurvey() {
   const [lang, setLang] = useState("it");
   const [phase, setPhase] = useState("intro");
@@ -353,6 +374,7 @@ export default function WineSurvey() {
   const [resError, setResError] = useState("");
   const [resCount, setResCount] = useState(0);
   const [resRecent, setResRecent] = useState([]);
+  const [resSelected, setResSelected] = useState(null);
   const tapsRef = useRef([]);
 
   const t = T[lang];
@@ -800,7 +822,7 @@ export default function WineSurvey() {
               </div>
             )}
 
-            {resUnlocked && (
+            {resUnlocked && !resSelected && (
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
                   <div>
@@ -821,15 +843,122 @@ export default function WineSurvey() {
                 </div>
                 <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 24 }}>
                   {resRecent.map((r, i) => (
-                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1.5fr 0.9fr 1.1fr", gap: 8, padding: "11px 14px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13 }}>
+                    <div key={i} onClick={() => setResSelected(r)} style={{ display: "grid", gridTemplateColumns: "1.5fr 0.9fr 1.1fr 0.4fr", gap: 8, padding: "11px 14px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 13, cursor: "pointer", transition: "background 100ms" }}
+                      onMouseEnter={e => e.currentTarget.style.background = COLORS.bgPage}
+                      onMouseLeave={e => e.currentTarget.style.background = ""}
+                    >
                       <span style={{ color: COLORS.textPrimary, fontVariantNumeric: "tabular-nums" }}>{fmtTime(r.timestamp)}</span>
                       <span style={{ color: COLORS.textSecondary }}>{t.age} {r.age}</span>
                       <span style={{ color: COLORS.textSecondary }}>{r.gender || "—"}</span>
+                      <span style={{ color: COLORS.textFaint, textAlign: "right" }}>›</span>
                     </div>
                   ))}
                   {resCount === 0 && <div style={{ padding: 18, textAlign: "center", color: COLORS.textFaint, fontSize: 13 }}>{t.noResponses}</div>}
                 </div>
                 <button onClick={onDownloadExcel} style={{ width: "100%", background: COLORS.night, color: COLORS.oro300, border: "none", padding: 15, borderRadius: 8, fontFamily: "system-ui, sans-serif", textTransform: "uppercase", letterSpacing: "0.12em", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{t.downloadExcel}</button>
+              </div>
+            )}
+
+            {resUnlocked && resSelected && (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+                  <button onClick={() => setResSelected(null)} style={{ background: "transparent", border: `1px solid ${COLORS.borderStrong}`, color: COLORS.textSecondary, padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>← {lang === "it" ? "Lista" : "List"}</button>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: COLORS.accentStrong, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em" }}>{resSelected.id}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>{fmtTime(resSelected.timestamp)}</div>
+                  </div>
+                  <button onClick={() => setResOpen(false)} style={{ background: "transparent", border: "none", color: COLORS.textMuted, fontSize: 12, cursor: "pointer" }}>{t.close}</button>
+                </div>
+
+                {/* Demographics */}
+                <div style={{ background: COLORS.night, color: COLORS.oro300, borderRadius: 10, padding: "16px 20px", marginBottom: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {[
+                    [lang === "it" ? "Età" : "Age", resSelected.age],
+                    [lang === "it" ? "Genere" : "Gender", resSelected.gender],
+                    [lang === "it" ? "Istruzione" : "Education", resSelected.education],
+                    ["Lang", resSelected.lang?.toUpperCase()],
+                  ].map(([label, val]) => (
+                    <div key={label}>
+                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", opacity: 0.65, marginBottom: 2 }}>{label}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{val || "—"}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Consumption & Knowledge */}
+                <DetailSection title={lang === "it" ? "Consumo & Conoscenza" : "Consumption & Knowledge"}>
+                  {["wine","beer","spirits"].map(cat => (
+                    <div key={cat} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, color: COLORS.textSecondary, textTransform: "capitalize" }}>{cat}</span>
+                      <span style={{ fontSize: 13 }}>{lang === "it" ? "Consumo" : "Cons."}: <b>{resSelected.consumption?.[cat] ?? "—"}</b></span>
+                      <span style={{ fontSize: 13 }}>{lang === "it" ? "Conosc." : "Know."}: <b>{resSelected.knowledge?.[cat] ?? "—"}</b></span>
+                    </div>
+                  ))}
+                </DetailSection>
+
+                {/* Perceptions */}
+                {["wine","beer","spirits"].map(cat => {
+                  const perc = resSelected.perceptions?.[cat] || {};
+                  const groups = [
+                    { label: "Heritage & Complexity", keys: ["hc1","hc2","hc3","hc4"] },
+                    { label: lang === "it" ? "Sentirsi inclusi" : "Feeling included", keys: ["cb1","cb2","cb3","cb4"] },
+                    { label: lang === "it" ? "Sentirsi a proprio agio" : "Feeling at ease", keys: ["fa1","fa2","fa3","fa4"] },
+                  ];
+                  const catColors = { wine: "#7C2638", beer: "#8A4E1C", spirits: "#13586E" };
+                  return (
+                    <DetailSection key={cat} title={cat.charAt(0).toUpperCase() + cat.slice(1)} accent={catColors[cat]}>
+                      {groups.map(g => (
+                        <div key={g.label} style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: COLORS.textMuted, marginBottom: 4 }}>{g.label}</div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {g.keys.map(k => (
+                              <div key={k} style={{ flex: 1, textAlign: "center" }}>
+                                <div style={{ fontSize: 10, color: COLORS.textFaint, marginBottom: 2 }}>{k}</div>
+                                <div style={{ background: perc[k] ? catColors[cat] : COLORS.border, color: perc[k] ? COLORS.oro300 : COLORS.textFaint, borderRadius: 6, padding: "4px 0", fontSize: 14, fontWeight: 700 }}>{perc[k] || "—"}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </DetailSection>
+                  );
+                })}
+
+                {/* Anxiety */}
+                <DetailSection title={lang === "it" ? "Ansia nella scelta del vino" : "Wine choice anxiety"}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {["an1","an2","an3","an4"].map(k => (
+                      <div key={k} style={{ flex: 1, textAlign: "center" }}>
+                        <div style={{ fontSize: 10, color: COLORS.textFaint, marginBottom: 2 }}>{k}</div>
+                        <div style={{ background: resSelected.anxiety?.[k] ? COLORS.night : COLORS.border, color: resSelected.anxiety?.[k] ? COLORS.oro300 : COLORS.textFaint, borderRadius: 6, padding: "4px 0", fontSize: 14, fontWeight: 700 }}>{resSelected.anxiety?.[k] || "—"}</div>
+                      </div>
+                    ))}
+                  </div>
+                </DetailSection>
+
+                {/* Cues */}
+                <DetailSection title={lang === "it" ? "Indicatori di heritage" : "Heritage cues"}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {["origin","family","method","score","organic","vintage","price"].map(k => (
+                      <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+                        <span style={{ color: COLORS.textSecondary }}>{k}</span>
+                        <ScoreBar value={resSelected.cues?.[k]} max={5} />
+                      </div>
+                    ))}
+                  </div>
+                </DetailSection>
+
+                {/* Open answers */}
+                {(resSelected.open1 || resSelected.open2 || resSelected.open3) && (
+                  <DetailSection title={lang === "it" ? "Risposte aperte" : "Open answers"}>
+                    {[resSelected.open1, resSelected.open2, resSelected.open3].map((txt, i) => txt ? (
+                      <div key={i} style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 11, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Q{i+1}</div>
+                        <div style={{ fontSize: 14, color: COLORS.textPrimary, lineHeight: 1.55, background: COLORS.bgPage, borderRadius: 6, padding: "10px 12px" }}>{txt}</div>
+                      </div>
+                    ) : null)}
+                  </DetailSection>
+                )}
               </div>
             )}
 
